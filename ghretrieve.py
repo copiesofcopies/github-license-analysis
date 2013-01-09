@@ -15,6 +15,7 @@ from urlparse import urljoin
 from base64 import b64decode
 
 config = None
+requests_left = 60
 
 def get_repo(repo_url):
     r = api_request(repo_url)
@@ -39,7 +40,7 @@ def get_repo_licenses(repo_url):
 
         # For each file...
         for afile in base_dir:
-            if not afile['name'] in license_files:
+            if afile['type'] == 'file' and (not afile['name'] in license_files):
 
                 # Run through each pattern...
                 for pattern in patterns:
@@ -48,7 +49,8 @@ def get_repo_licenses(repo_url):
                         license_path = "%s%s" % (base_url, afile['name'])                    
                         file_r = api_request(license_path)
                         if(file_r.ok):
-                            license_obj = json.loads(file_r.text or file_r.content)
+                            license_obj = json.loads(file_r.text or\
+                                                         file_r.content)
                             license_files[afile['name']] = license_obj
 
     # Tack on the README file
@@ -60,13 +62,21 @@ def get_repo_licenses(repo_url):
     return license_files
 
 def api_request(url):
+    global requests_left
+
     u = config['github_user'] 
     p = config['github_password']
+    r = None
 
     if(u and p):
-        return requests.get(url, auth=(u, p))
+        r = requests.get(url, auth=(u, p))
     else:
-        return requests.get(url)
+        r = requests.get(url)
+
+    if(r.ok):
+        requests_left = r.headers['X-RateLimit-Remaining']
+
+    return r
 
 if __name__ == "__main__":
     # Parse the yaml config file
@@ -101,12 +111,13 @@ if __name__ == "__main__":
     next_repos_url = repos_url
 
     # Retrieve pages of repos till rate limit is reached
-    requests_left = 5000
     r = api_request(next_repos_url)
+    logger.info("Request status: %s" % r.headers['status'])
 
     while(r.ok):
         repos_json = json.loads(r.text or r.content)
-        requests_left = r.headers['X-RateLimit-Remaining']
+
+        logger.info("Requests left: %s" % requests_left)
 
         # Get link for next page of repos
         links = link_header.parse_link_value(r.headers['link'])
@@ -117,13 +128,12 @@ if __name__ == "__main__":
 
         # Process this page of repos
         for repo in repos_json:
+
             # If we're out of requests, sleep in 5-minute increments
             while(requests_left < 4):
                 logger.info("Waiting for rate limit to reset...")
                 time.sleep(300)
                 rl_resp = api_request("https://api.github.com/rate_limit")
-                if(rl_resp.ok):
-                    requests_left = rl_resp.headers['X-RateLimit-Remaining']
 
             # Log the effort to store this repo's information:
             logger.info("Storing repository %s (Fork? %s)" % \
@@ -152,14 +162,7 @@ if __name__ == "__main__":
                     license_names.append(license_name)
                     alicense = licenses[license_name]
 
-                    # Write license info to the log
-                    license_data = "%s: %s; " % ('repo_id', repo['id'])
-
-                    for k in alicense:
-                        if k != "content":
-                            license_data += "%s: %s; " % (k, alicense[k])
-
-                    logger.info("Storing license: %s" % license_data)
+                    logger.info("Storing license: %s" % license_name)
 
                     # Store this license in the DB
                     try:
@@ -188,6 +191,7 @@ if __name__ == "__main__":
             except psycopg2.IntegrityError:
 
                 # We've already got one -- rollback and hit the next one
+                logger.info("Repository already retrieved, moving on...")
                 db_conn.rollback()
 
             except psycopg2.DatabaseError, e:
@@ -204,3 +208,4 @@ if __name__ == "__main__":
             next_repos_url)
 
         r = api_request(next_repos_url)
+        logger.info("Request status: %s" % r.headers['status'])
