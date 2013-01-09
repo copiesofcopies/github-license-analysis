@@ -1,2 +1,6 @@
 github_user:
 github_password:
+database:
+database_host:
+database_user:
+database_password:

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # TODO: DB storage, logging
 
 import requests
@@ -6,6 +7,10 @@ import optparse
 import time
 import yaml
 import link_header
+import re
+import logging
+import psycopg2
+import sys
 from urlparse import urljoin
 from base64 import b64decode
 
@@ -20,27 +25,37 @@ def get_repo(repo_url):
 
     return None
 
-def get_repo_license(repo_url):
-    license_files = {'COPYING':None, 'LICENSE':None, 'README':None}
+def get_repo_licenses(repo_url):
+    license_files = {}
 
-    copying_url = "%s/contents/%s" % (repo_url, 'COPYING')
-    license_url = "%s/contents/%s" % (repo_url, 'LICENSE')
+    base_url = "%s/contents/" % repo_url
     readme_url = "%s/readme" % repo_url
 
-    r = api_request(copying_url)
+    # Iterate over files in TLD to look for license-ish filenames
+    r = api_request(base_url)
     if(r.ok):
-        copying_file = json.loads(r.text or r.content)
-        license_files['COPYING'] = copying_file
-    
-    r = api_request(license_url)
-    if(r.ok):
-        license_file = json.loads(r.text or r.content)
-        license_files['LICENSE'] = license_file
+        base_dir = json.loads(r.text or r.content)
+        patterns = [ 'copying', 'license', 'gpl', 'apache', 'bsd', 'mit' ]        
 
+        # For each file...
+        for afile in base_dir:
+            if not afile['name'] in license_files:
+
+                # Run through each pattern...
+                for pattern in patterns:
+                    # And collect the matches in our licenses array
+                    if(re.search(pattern, afile['name'], flags=re.IGNORECASE)):
+                        license_path = "%s%s" % (base_url, afile['name'])                    
+                        file_r = api_request(license_path)
+                        if(file_r.ok):
+                            license_obj = json.loads(file_r.text or file_r.content)
+                            license_files[afile['name']] = license_obj
+
+    # Tack on the README file
     r = api_request(readme_url)
     if(r.ok):
         readme_file = json.loads(r.text or r.content)
-        license_files['README'] = readme_file
+        license_files[readme_file['name']] = readme_file
 
     return license_files
 
@@ -58,6 +73,13 @@ if __name__ == "__main__":
     config_file = open('config.yaml', 'r')
     config = yaml.load(config_file.read())
 
+    # Initialize database connection
+    db_conn = psycopg2.connect(database=config['database'], 
+                           user=config['database_user'],
+                           password=config['database_password'])    
+    
+    cur = db_conn.cursor()
+
     # Set up the command line argument parser
     parser = optparse.OptionParser()
 
@@ -68,6 +90,11 @@ if __name__ == "__main__":
                       default="")
     
     options, args = parser.parse_args()
+
+    # Initialize log file
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(filename='output.log',level=logging.ERROR)
+    logging.getLogger(__name__).setLevel(logging.DEBUG)
 
     # Get the URL from the 'url' argument or start from square one
     repos_url = options.url or "https://api.github.com/repositories"
@@ -92,30 +119,88 @@ if __name__ == "__main__":
         for repo in repos_json:
             # If we're out of requests, sleep in 5-minute increments
             while(requests_left < 4):
-                print "Waiting for rate limit to reset..."
+                logger.info("Waiting for rate limit to reset...")
                 time.sleep(300)
                 rl_resp = api_request("https://api.github.com/rate_limit")
                 if(rl_resp.ok):
                     requests_left = rl_resp.headers['X-RateLimit-Remaining']
 
-            licenses = get_repo_license(repo['url'])
+            # Log the effort to store this repo's information:
+            logger.info("Storing repository %s (Fork? %s)" % \
+                            (repo['full_name'], repo['fork']))
 
-            print "Repository: %s\nFork? %s" % (repo['full_name'], repo['fork'])
+            # Store repo in the DB
+            try:
+                cur.execute("""
+                            INSERT INTO repositories(gh_id, owner_login, name,
+                                        full_name, description, private, fork,
+                                        api_url, html_url) VALUES (%s, %s, %s, 
+                                        %s, %s, %s, %s, %s, %s)
+                            """, (repo['id'], repo['owner']['login'],
+                                  repo['name'], repo['full_name'],
+                                  repo['description'], repo['private'], 
+                                  repo['fork'], repo['url'],
+                                  repo['html_url']))
 
-            if(licenses['LICENSE']):
-                print "LICENSE: %s" % licenses['LICENSE']['path']
-            else:
-                print "LICENSE: None"
+                db_conn.commit()
 
-            if(licenses['COPYING']):
-                print "COPYING: %s" % licenses['COPYING']['path']
-            else:
-                print "COPYING: None"
+                # Find likely license files
+                licenses = get_repo_licenses(repo['url'])
+                license_names = []
 
-            print ""
-        
+                for license_name in licenses:
+                    license_names.append(license_name)
+                    alicense = licenses[license_name]
+
+                    # Write license info to the log
+                    license_data = "%s: %s; " % ('repo_id', repo['id'])
+
+                    for k in alicense:
+                        if k != "content":
+                            license_data += "%s: %s; " % (k, alicense[k])
+
+                    logger.info("Storing license: %s" % license_data)
+
+                    # Store this license in the DB
+                    try:
+                        cur.execute("""
+                            INSERT INTO repository_licenses(repository_id,
+                                        type, encoding, api_url, html_url,
+                                        size, name, path, content, sha) VALUES (
+                                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (repo['id'], alicense['type'], 
+                                  alicense['encoding'], 
+                                  alicense['_links']['self'],
+                                  alicense['_links']['html'],
+                                  alicense['size'], alicense['name'],
+                                  alicense['path'], alicense['content'], 
+                                  alicense['sha']))
+
+                        db_conn.commit()
+                    except psycopg2.DatabaseError, e:
+                        db_conn.rollback()
+    
+                        logger.error('Error %s when adding file %s for repo %s' %\
+                                         (e, license_name, repo['full_name']))    
+                        db_conn.close()
+                        sys.exit(1)
+
+            except psycopg2.IntegrityError:
+
+                # We've already got one -- rollback and hit the next one
+                db_conn.rollback()
+
+            except psycopg2.DatabaseError, e:
+
+                # Unhandled errors dump us 
+                db_conn.rollback()
+    
+                logger.error('Error %s when inserting %s' % (e, repo['full_name']))    
+                db_conn.close()
+                sys.exit(1)
+
         # Get the next page of repos
-        print "Finished with that batch! Getting the next from %s" %\
-            next_repos_url
+        logger.info("Finished a page. Getting the next from %s" %\
+            next_repos_url)
 
         r = api_request(next_repos_url)
