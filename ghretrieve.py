@@ -89,7 +89,7 @@ def wait_for_rate_limit_reset():
         if r.ok:
             requests_left = r.headers['X-RateLimit-Remaining']
 
-        if r.status_code != 200 or requests_left < 20:
+        if r.status_code != 200 or requests_left < 70:
             logger.info("Waiting for rate limit to reset...")
             time.sleep(300)
         else:
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         # Process this page of repos
         for repo in repos_json:
 
-            if requests_left < 20:
+            if requests_left < 70:
                 wait_for_rate_limit_reset()
 
             # Log the effort to store this repo's information:
