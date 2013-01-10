@@ -84,12 +84,12 @@ def wait_for_rate_limit_reset():
 
     # If we're out of requests, sleep in 5-minute increments
     while True:
-        r = requests.get("https://api.github.com/rate_limit")
+        r = api_request("https://api.github.com/rate_limit")
 
         if r.ok:
             requests_left = int(r.headers['X-RateLimit-Remaining'])
 
-        if r.status_code != 200 or requests_left < 70:
+        if r.status_code != 200 or requests_left < 10:
             logger.info("Waiting for rate limit to reset...")
             time.sleep(300)
         else:
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     # Retrieve pages of repos till rate limit is reached
     r = api_request(next_repos_url)
 
-    if requests_left < 70 or r.status_code != 200:
+    if requests_left < 10 or r.status_code != 200:
         wait_for_rate_limit_reset()
 
     logger.info("Request status: %s" % r.headers['status'])
@@ -154,7 +154,7 @@ if __name__ == "__main__":
         # Process this page of repos
         for repo in repos_json:
 
-            if requests_left < 70 or r.status_code != 200:
+            if requests_left < 10 or r.status_code != 200:
                 wait_for_rate_limit_reset()
 
             # Log the effort to store this repo's information:
