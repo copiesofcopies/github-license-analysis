@@ -16,6 +16,9 @@ from base64 import b64decode
 
 config = None
 requests_left = 60
+license_pattern = re.compile(r"""\b(copying|license|gnu|gpl|apache|apl|bsd|cddl|
+                                 mit|mozilla|mpl|eclipse|epl|qpl|isc)\b""",\
+                                 re.IGNORECASE)
 
 def get_repo(repo_url):
     r = api_request(repo_url)
@@ -27,6 +30,7 @@ def get_repo(repo_url):
     return None
 
 def get_repo_licenses(repo_url):
+    global license_pattern
     license_files = {}
 
     base_url = "%s/contents/" % repo_url
@@ -36,22 +40,19 @@ def get_repo_licenses(repo_url):
     r = api_request(base_url)
     if(r.ok):
         base_dir = json.loads(r.text or r.content)
-        patterns = [ 'copying', 'license', 'gpl', 'apache', 'bsd', 'mit' ]        
 
         # For each file...
         for afile in base_dir:
             if afile['type'] == 'file' and (not afile['name'] in license_files):
 
                 # Run through each pattern...
-                for pattern in patterns:
-                    # And collect the matches in our licenses array
-                    if(re.search(pattern, afile['name'], flags=re.IGNORECASE)):
-                        license_path = "%s%s" % (base_url, afile['name'])                    
-                        file_r = api_request(license_path)
-                        if(file_r.ok):
-                            license_obj = json.loads(file_r.text or\
-                                                         file_r.content)
-                            license_files[afile['name']] = license_obj
+                if license_pattern.search(afile['name']):
+                    license_path = "%s%s" % (base_url, afile['name'])                    
+                    file_r = api_request(license_path)
+                    if(file_r.ok):
+                        license_obj = json.loads(file_r.text or\
+                                                     file_r.content)
+                        license_files[afile['name']] = license_obj
 
     # Tack on the README file
     r = api_request(readme_url)
