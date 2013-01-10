@@ -79,6 +79,23 @@ def api_request(url):
 
     return r
 
+def wait_for_rate_limit_reset():
+    global requests_left
+
+    # If we're out of requests, sleep in 5-minute increments
+    while True:
+        r = requests.get("https://api.github.com/rate_limit")
+
+        if r.ok:
+            requests_left = r.headers['X-RateLimit-Remaining']
+
+        if r.status_code != '200' or requests_left < 20:
+            logger.info("Waiting for rate limit to reset...")
+            time.sleep(300)
+        else:
+            break
+        
+
 if __name__ == "__main__":
     # Parse the yaml config file
     config_file = open('config.yaml', 'r')
@@ -111,6 +128,9 @@ if __name__ == "__main__":
     repos_url = options.url or "https://api.github.com/repositories"
     next_repos_url = repos_url
 
+    # Make sure we haven't hit the rate limit
+    wait_for_rate_limit_reset()
+
     # Retrieve pages of repos till rate limit is reached
     r = api_request(next_repos_url)
     logger.info("Request status: %s" % r.headers['status'])
@@ -130,11 +150,8 @@ if __name__ == "__main__":
         # Process this page of repos
         for repo in repos_json:
 
-            # If we're out of requests, sleep in 5-minute increments
-            while(requests_left < 4):
-                logger.info("Waiting for rate limit to reset...")
-                time.sleep(300)
-                rl_resp = api_request("https://api.github.com/rate_limit")
+            if requests_left < 20:
+                wait_for_rate_limit_reset()
 
             # Log the effort to store this repo's information:
             logger.info("Storing repository %s (Fork? %s)" % \
