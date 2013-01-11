@@ -86,6 +86,12 @@ def api_request(url):
         except requests.exceptions.ConnectionError, e:
             logger.error('Connection error when retrieving record: %s.'\
                              'Retrying...' % e)
+            time.sleep(10)
+        except:
+            logger.error('Uncaught error when connecting to github %s' % \
+                             sys.exc_info()[0])
+            sys.exit(1)
+
 
 def wait_for_rate_limit_reset():
     global requests_left
