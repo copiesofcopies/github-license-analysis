@@ -71,15 +71,21 @@ def api_request(url):
     p = config['github_password']
     r = None
 
-    if(u and p):
-        r = requests.get(url, auth=(u, p))
-    else:
-        r = requests.get(url)
+    while True:
 
-    if(r.ok):
-        requests_left = int(r.headers['X-RateLimit-Remaining'])
+        try:
+            if(u and p):
+                r = requests.get(url, auth=(u, p))
+            else:
+                r = requests.get(url)
 
-    return r
+            if(r.ok):
+                requests_left = int(r.headers['X-RateLimit-Remaining'])
+
+            return r            
+        except requests.exceptions.ConnectionError, e:
+            logger.error('Connection error when retrieving record: %s.'\
+                             'Retrying...' % e)
 
 def wait_for_rate_limit_reset():
     global requests_left
