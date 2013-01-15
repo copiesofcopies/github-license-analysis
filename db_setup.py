@@ -44,6 +44,12 @@ try:
                                      content TEXT,
                                      sha VARCHAR)""")
 
+    cur.execute("""CREATE TABLE license_metadata(id SERIAL PRIMARY KEY, 
+                                     license_id INT UNIQUE REFERENCES repository_licenses (id),
+                                     stripped_sha VARCHAR,
+                                     is_primary BOOL DEFAULT FALSE,
+                                     license_abbr VARCHAR)""")
+
     con.commit()
     
 

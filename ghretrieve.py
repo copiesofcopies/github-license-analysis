@@ -16,10 +16,10 @@ from base64 import b64decode
 
 config = None
 requests_left = 60
-license_pattern = re.compile(r"""\b(copying|license|licensing|gnu|gpl|gplv2|
-                                 gplv3|lgpl|lgplv2|lgplv3|agpl|agplv2|agplv3|
-                                 apache|apl|bsd|cddl|mit|mozilla|mpl|mplv2|
-                                 eclipse|epl|qpl|isc)\b""",\
+license_pattern = re.compile(r"""\b(copying|license|licence|licensing|gnu|gpl|
+                                 gplv2|gplv3|lgpl|lgplv2|lgplv3|agpl|agplv2|
+                                 agplv3|apache|apl|bsd|cddl|mit|mozilla|mpl|
+                                 mplv2|eclipse|epl|qpl|isc)\b""",\
                                  re.IGNORECASE)
 
 def get_repo(repo_url):
