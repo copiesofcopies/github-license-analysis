@@ -22,33 +22,35 @@ try:
     cur = con.cursor()
   
     cur.execute("""CREATE TABLE repositories(id SERIAL PRIMARY KEY, 
-                                     gh_id INT UNIQUE,
-                                     owner_login VARCHAR,
-                                     name VARCHAR,
-                                     full_name VARCHAR,
-                                     description VARCHAR,
-                                     private BOOLEAN,
-                                     fork BOOLEAN,
-                                     api_url VARCHAR,
-                                     html_url VARCHAR)""")
+                                gh_id INT UNIQUE,
+                                owner_login VARCHAR,
+                                name VARCHAR,
+                                full_name VARCHAR,
+                                description VARCHAR,
+                                private BOOLEAN,
+                                fork BOOLEAN,
+                                api_url VARCHAR,
+                                html_url VARCHAR)""")
 
     cur.execute("""CREATE TABLE repository_licenses(id SERIAL PRIMARY KEY, 
-                                     repository_id INT REFERENCES repositories (gh_id),
-                                     type VARCHAR,
-                                     encoding VARCHAR,
-                                     api_url VARCHAR,
-                                     html_url VARCHAR,
-                                     size INT,
-                                     name VARCHAR,
-                                     path VARCHAR,
-                                     content TEXT,
-                                     sha VARCHAR)""")
+                                repository_id INT REFERENCES 
+                                                  repositories (gh_id),
+                                type VARCHAR,
+                                encoding VARCHAR,
+                                api_url VARCHAR,
+                                html_url VARCHAR,
+                                size INT,
+                                name VARCHAR,
+                                path VARCHAR,
+                                content TEXT,
+                                sha VARCHAR)""")
 
     cur.execute("""CREATE TABLE license_metadata(id SERIAL PRIMARY KEY, 
-                                     license_id INT UNIQUE REFERENCES repository_licenses (id),
-                                     stripped_sha VARCHAR,
-                                     is_primary BOOL DEFAULT FALSE,
-                                     license_abbr VARCHAR)""")
+                                license_id INT REFERENCES 
+                                               repository_licenses (id),
+                                is_primary BOOLEAN DEFAULT FALSE,
+                                license_abbr VARCHAR,
+                                UNIQUE(license_id, license_abbr))""")
 
     con.commit()
     
