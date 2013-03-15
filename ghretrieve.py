@@ -85,7 +85,9 @@ def api_request(url):
             if(r.status_code < 300):
                 return r
             else:
-                time.sleep(10)
+                logger.error('Non-200 return code: %s.'\
+                             'Retrying...' % r.status_code)
+                time.sleep(5)
         except requests.exceptions.ConnectionError, e:
             logger.error('Connection error when retrieving record: %s.'\
                              'Retrying...' % e)
