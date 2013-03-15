@@ -245,3 +245,8 @@ if __name__ == "__main__":
 
         r = api_request(next_repos_url)
         logger.info("Request status: %s" % r.headers['status'])
+
+        while r.status_code == 401:
+            logger.info("Got a 401. Retrying...")
+            time.sleep(60)
+            r = api_request(next_repos_url)
