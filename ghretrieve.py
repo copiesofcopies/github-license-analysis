@@ -81,8 +81,9 @@ def api_request(url):
 
             if(r.ok):
                 requests_left = int(r.headers['X-RateLimit-Remaining'])
-
-            return r            
+                return r
+            else:
+                time.sleep(10)
         except requests.exceptions.ConnectionError, e:
             logger.error('Connection error when retrieving record: %s.'\
                              'Retrying...' % e)
