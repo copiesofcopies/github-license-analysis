@@ -82,12 +82,7 @@ def api_request(url):
             if(r.ok):
                 requests_left = int(r.headers['X-RateLimit-Remaining'])
 
-            if(r.status_code < 300):
-                return r
-            else:
-                logger.error('Non-200 return code: %s.'\
-                             'Retrying...' % r.status_code)
-                time.sleep(5)
+            return r
         except requests.exceptions.ConnectionError, e:
             logger.error('Connection error when retrieving record: %s.'\
                              'Retrying...' % e)
@@ -158,7 +153,7 @@ if __name__ == "__main__":
 
     logger.info("Request status: %s" % r.headers['status'])
 
-    while(r.ok):
+    while(r.ok or r.status_code == 401):
         repos_json = json.loads(r.text or r.content)
 
         logger.info("Requests left: %s" % requests_left)
