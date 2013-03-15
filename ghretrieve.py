@@ -81,6 +81,8 @@ def api_request(url):
 
             if(r.ok):
                 requests_left = int(r.headers['X-RateLimit-Remaining'])
+
+            if(r.status_code < 300)
                 return r
             else:
                 time.sleep(10)
