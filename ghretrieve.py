@@ -172,8 +172,8 @@ if __name__ == "__main__":
                 wait_for_rate_limit_reset()
 
             # Log the effort to store this repo's information:
-            logger.info("Storing repository %s (Fork? %s)" % \
-                            (repo['full_name'], repo['fork']))
+            logger.info("Storing repository #%s: %s (Fork? %s)" % \
+                            (repo['id'], repo['full_name'], repo['fork']))
 
             # Store repo in the DB
             try:
