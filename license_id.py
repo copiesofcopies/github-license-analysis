@@ -28,7 +28,7 @@ def create_metadata_table():
     db_conn.commit()
 
 
-def process_licenses():
+def process_licenses(start = 0):
 
     # Create a directory to store the license files in
     base_path = config['export_directory']
@@ -36,58 +36,74 @@ def process_licenses():
     if not os.path.exists(base_path):
         os.makedirs(base_path)
 
-    # Get license info
-    cur.execute("""SELECT r.full_name, l.content, l.name, l.id
+    # Get repo count
+    cur.execute("""SELECT COUNT(*) FROM repositories""")
+    count = cur.fetchone()[0]
+
+    logger.info("There are %s repositories. Processing..." % count)
+
+    end = start + 999
+
+    while start < count:
+
+        logger.info("Processing repositories %s - %s..." % (start, end))
+
+        # Get license info
+        cur.execute("""SELECT r.id, r.full_name, l.content, l.name, l.id
                    FROM repositories r, repository_licenses l
                    WHERE r.gh_id = l.repository_id
-                """)
+                     AND r.id >=%s AND r.id <= %s
+                """ % (start, end))
 
-    licenses = cur.fetchall()
+        licenses = cur.fetchall()
 
-    for row in licenses:
-        repo_name = row[0]
-        license_text = b64decode(row[1])
-        license_name = row[2]
-        license_id = row[3]
+        for row in licenses:
+            repo_id = row[0]
+            repo_name = row[1]
+            license_text = b64decode(row[2])
+            license_name = row[3]
+            license_id = row[4]
 
-        repo_path = os.path.join(base_path, repo_name)
-        license_path = os.path.join(repo_path, license_name)
+            repo_path = os.path.join(base_path, repo_name)
+            license_path = os.path.join(repo_path, license_name)
 
-        if not os.path.exists(repo_path):
-            os.makedirs(repo_path)
+            if not os.path.exists(repo_path):
+                os.makedirs(repo_path)
 
-        if not os.path.exists(license_path):
-            f = open(license_path, 'w')
-            f.write(license_text)
-            f.close()
+            if not os.path.exists(license_path):
+                f = open(license_path, 'w')
+                f.write(license_text)
+                f.close()
 
-        licenses_found = process_nomos_output(license_path)
-        print "%s/%s contains: %s" % \
-            (repo_name, license_name, ", ".join(licenses_found))
+            licenses_found = process_nomos_output(license_path)
+            logger.info("%s/%s (%s) contains: %s" % \
+                (repo_name, license_name, repo_id, ", ".join(licenses_found)))
 
-        # Create a DB entry for each license found
-        for abbr in licenses_found:
-            try:
-                cur.execute("""
+            # Create a DB entry for each license found
+            for abbr in licenses_found:
+                try:
+                    cur.execute("""
                             INSERT INTO license_metadata(license_id,
                                         license_abbr)
                                         VALUES ( %s, %s )
                             """, (license_id, abbr))
 
-                db_conn.commit()
-            except psycopg2.IntegrityError, e:
-                db_conn.rollback()
-                logger.error('Integrity Error %s. Metadata record may '\
+                    db_conn.commit()
+                except psycopg2.IntegrityError, e:
+                    db_conn.rollback()
+                    logger.error('Integrity Error %s. Metadata record may '\
                                  'already exist for this project+license.' %\
                                  e)    
-            except psycopg2.DatabaseError, e:
-                db_conn.rollback()
+                except psycopg2.DatabaseError, e:
+                    db_conn.rollback()
                 
-                logger.error('Error %s when updating metadata for %s' %\
-                                 (e, abbr))    
-                db_conn.close()
-                sys.exit(1)
+                    logger.error('Error %s when updating metadata for %s' %\
+                                     (e, abbr))    
+                    db_conn.close()
+                    sys.exit(1)
 
+        start = start + 1000
+        end = end + 1000
 
 def export_licenses(output_file_path=None):
 
@@ -122,8 +138,12 @@ def process_nomos_output(license_path):
 
         if len(line.split()):
             m = nomos_re.match(output)
-            licenses_found = m.group(1).split(',')
-            licenses_found = sanitize_license_list(licenses_found)
+
+            if m:
+                licenses_found = m.group(1).split(',')
+                licenses_found = sanitize_license_list(licenses_found)
+            else:
+                licenses_found = []
 
             return licenses_found
 
@@ -274,6 +294,11 @@ if __name__ == "__main__":
                               FOSSology nomos tool, store results""",
                       default="")
 
+    parser.add_option('-s', '--start_with',
+                      action="store", dest="start_with",
+                      help="""Indicate which record to start processing with""",
+                      default=0)
+
     parser.add_option('-l', '--list_unmatched_repos',
                       action="store_true", dest="list_unmatched_repos",
                       help="""List repositories for which there is no 
@@ -294,9 +319,9 @@ if __name__ == "__main__":
     options, args = parser.parse_args()
 
     # Initialize database connection
-    db_conn = psycopg2.connect(database=config['database'], 
-                           user=config['database_user'],
-                           password=config['database_password'])    
+    db_conn = psycopg2.connect(database=config['static_database'], 
+                           user=config['static_database_user'],
+                           password=config['static_database_password'])    
     
     cur = db_conn.cursor()
 
@@ -315,7 +340,7 @@ if __name__ == "__main__":
 
     # Try to match license files against known strings
     if options.process_licenses:
-        process_licenses()
+        process_licenses(int(options.start_with))
 
     # Export CSV of license data
     if options.export_licenses:
