@@ -10,6 +10,7 @@ import hashlib
 import optparse
 import subprocess
 import csv
+import shutil
 from base64 import b64decode
 
 config = None
@@ -33,8 +34,8 @@ def process_licenses(start = 0):
     # Create a directory to store the license files in
     base_path = config['export_directory']
 
-    if not os.path.exists(base_path):
-        os.makedirs(base_path)
+    #if not os.path.exists(base_path):
+    #    os.makedirs(base_path)
 
     # Get repo count
     cur.execute("""SELECT COUNT(*) FROM repositories""")
@@ -48,16 +49,21 @@ def process_licenses(start = 0):
 
         logger.info("Processing repositories %s - %s..." % (start, end))
 
+	#if not os.path.exists(base_path):
+        #    os.makedirs(base_path)
+
         # Get license info
         cur.execute("""SELECT r.id, r.full_name, l.content, l.name, l.id
                    FROM repositories r, repository_licenses l
                    WHERE r.gh_id = l.repository_id
+	 	     AND r.fork = 'f'
                      AND r.id >=%s AND r.id <= %s
                 """ % (start, end))
 
         licenses = cur.fetchall()
-
-        for row in licenses:
+	last_repo_path = None       
+ 
+	for row in licenses:
             repo_id = row[0]
             repo_name = row[1]
             license_text = b64decode(row[2])
@@ -65,7 +71,16 @@ def process_licenses(start = 0):
             license_id = row[4]
 
             repo_path = os.path.join(base_path, repo_name)
+	
+	    if last_repo_path != None and last_repo_path != repo_path:
+	    	shutil.rmtree(last_repo_path)
+
+	    last_repo_path = repo_path
+
             license_path = os.path.join(repo_path, license_name)
+
+	    logger.info("Processing %s/%s (%s)..." % \
+                (repo_name, license_name, repo_id,))
 
             if not os.path.exists(repo_path):
                 os.makedirs(repo_path)
@@ -78,6 +93,8 @@ def process_licenses(start = 0):
             licenses_found = process_nomos_output(license_path)
             logger.info("%s/%s (%s) contains: %s" % \
                 (repo_name, license_name, repo_id, ", ".join(licenses_found)))
+
+	    os.remove(license_path)
 
             # Create a DB entry for each license found
             for abbr in licenses_found:
@@ -104,6 +121,8 @@ def process_licenses(start = 0):
 
         start = start + 1000
         end = end + 1000
+
+        shutil.rmtree(base_path)
 
 def export_licenses(output_file_path=None):
 
@@ -160,6 +179,12 @@ def sanitize_license_list(license_list):
     gpl_i = list_substring_search(license_list, "GPL")
     agpl_i = list_substring_search(license_list, "Affero")
 
+    # All "MIT" and "MIT-style" should just be "MIT"
+    if mit_i > -1 and mit_style_i > -1:
+        license_list.remove("MIT-style")
+    elif mit_style_i > -1:
+        license_list[mit_style_i] = "MIT"
+
     # "Public domain" match for Ruby, Artistic & GPL(s) are usually
     # false positives
     if pd_i > -1 and (agpl_i > -1 or gpl_i > -1 \
@@ -169,12 +194,6 @@ def sanitize_license_list(license_list):
     # "FSF" match for GPL not needed
     if gpl_i > -1 and fsf_i > -1:
         license_list.remove("FSF")
-
-    # All "MIT" and "MIT-style" should just be "MIT"
-    if mit_i > -1 and mit_style_i > -1:
-        license_list.remove("MIT-style")
-    elif mit_style_i > -1:
-        license_list[mit_style_i] = "MIT"
 
     return license_list
 
