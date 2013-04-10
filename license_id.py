@@ -210,7 +210,7 @@ def runProcess(exe):
 def list_unmatched_repos():
     # List all of the repositories with no readme or license file
 
-    cur.execute("""SELECT r.full_name
+    cur.execute("""SELECT r.full_name, r.html_url
                    FROM repositories r
                    LEFT JOIN repository_licenses l 
                           ON r.gh_id = l.repository_id 
@@ -225,7 +225,7 @@ def list_unmatched_repos():
 
 
 def count_license_matches():
-    # List all of the repositories with no readme or license file
+    # Count licenses matches
 
     cur.execute("""SELECT m.license_abbr, COUNT(r.id)
                    FROM repositories r
@@ -233,7 +233,7 @@ def count_license_matches():
                      ON r.gh_id = l.repository_id 
                    JOIN license_metadata m
                      ON l.id = m.license_id
-               GROUP BY m.license_abbr
+               GROUP BY m.license_abbr, r.full_name
                ORDER BY m.license_abbr ASC""")
 
     licenses = cur.fetchall()
