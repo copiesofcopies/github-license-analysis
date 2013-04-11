@@ -261,7 +261,7 @@ def count_license_matches():
         print "%s: %s" % ( alicense[0], alicense[1])
 
 
-def map_repos_to_licenses():
+def map_repos_to_licenses(start = 0):
     # Iterate through each repo's licenses, mapping each to an entry
     # in the master abbreviation list, dropping duplicate & equivalent
     # entries
@@ -296,8 +296,8 @@ def map_repos_to_licenses():
         variant = variant_re.match(l_abbr)
         license_id = None
 
-        if variant:
-            license_id = lic_map[m.group(1)]
+        if variant and lic_map.has_key(variant.group(1)):
+            license_id = lic_map[variant.group(1)]
         else:
             license_id = lic_map[l_abbr]
 
@@ -446,4 +446,4 @@ if __name__ == "__main__":
 
     # Map repos to licenses
     if options.map_repos_to_licenses:
-        map_repos_to_licenses()
+        map_repos_to_licenses(int(options.start_with))
