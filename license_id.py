@@ -274,22 +274,51 @@ def map_repos_to_licenses():
     for row in abbrs:
         lic_map[row[1]] = row[0]
 
-    print lic_map
+    cur.execute("""SELECT r.id as rid, l.id as lid, m.license_abbr as abbr
+                     FROM repositories r
+                     JOIN repository_licenses l 
+                       ON r.gh_id = l.repository_id 
+                     JOIN license_metadata m
+                       ON l.id = m.license_id
+                    WHERE m.license_abbr != 'No_license_found'
+                 ORDER BY r.id, l.id
+                   """) 
 
-    # cur.execute("""SELECT r.id as rid, l.id as lid, m.license_abbr as abbr
-    #                  FROM repositories r
-    #                  JOIN repository_licenses l 
-    #                    ON r.gh_id = l.repository_id 
-    #                  JOIN license_metadata m
-    #                    ON l.id = m.license_id
-    #                 WHERE m.license_abbr != 'No_license_found'
-    #              ORDER BY r.id, l.id
-    #                """) 
+    licenses = cur.fetchall()
 
-    # licenses = cur.fetchall()
+    variant_re = re.compile(r"(.*)\-(style|possibility)")
 
-    # for alicense in licenses:
-    #     print "%s/%s: %s" % (alicense[0], alicense[1], alicense[2])
+    for alicense in licenses:
+        r_id = alicense[0]
+        l_id = alicense[1]
+        l_abbr = alicense[2]
+
+        variant = variant_re.match(l_abbr)
+        license_id = None
+
+        if variant:
+            license_id = lic_map[m.group(1)]
+        else:
+            license_id = lic_map[l_abbr]
+
+        try:
+            cur.execute("""
+                        INSERT INTO repository_license_abbr(repository_id, license_id)
+                             VALUES ( %s, %s )
+                        """, (r_id, license_id))
+
+            db_conn.commit()
+        except psycopg2.IntegrityError, e:
+            db_conn.rollback()
+            logger.error('Integrity Error %s. License already associated with repo.' %\
+                             e)    
+        except psycopg2.DatabaseError, e:
+            db_conn.rollback()
+                
+            logger.error('Error %s when associating repo %s with license %s' %\
+                             (e, r_id, license_id))    
+            db_conn.close()
+            sys.exit(1)        
 
 
 def list_multilicense_repos():

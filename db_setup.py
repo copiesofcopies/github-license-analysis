@@ -52,6 +52,12 @@ try:
                                 license_abbr VARCHAR,
                                 UNIQUE(license_id, license_abbr))""")
 
+    cur.execute("""CREATE TABLE repository_license_abbr(repository_id INT REFERENCES 
+                                               repositories(id),
+                                license_abbr_id INT REFERENCES
+					licenses(id),
+                                UNIQUE(repository_id, license_abbr_id))""")
+
     con.commit()
     
 
