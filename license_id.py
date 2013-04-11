@@ -301,11 +301,11 @@ def map_repos_to_licenses():
         else:
             license_id = lic_map[l_abbr]
 
-        logger.info('Associating repository %s with license %s' % (r_id, l_abbr))
+        print('Associating repository %s with license %s' % (r_id, l_abbr))
 
         try:
             cur.execute("""
-                        INSERT INTO repository_license_abbr(repository_id, license_id)
+                        INSERT INTO repository_license_abbr(repository_id, license_abbr_id)
                              VALUES ( %s, %s )
                         """, (r_id, license_id))
 
