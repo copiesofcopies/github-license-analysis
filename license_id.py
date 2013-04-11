@@ -281,8 +281,9 @@ def map_repos_to_licenses(start = 0):
                      JOIN license_metadata m
                        ON l.id = m.license_id
                     WHERE m.license_abbr != 'No_license_found'
+                      AND r.id > %s
                  ORDER BY r.id, l.id
-                   """) 
+                   """ % start) 
 
     licenses = cur.fetchall()
 
@@ -312,8 +313,8 @@ def map_repos_to_licenses(start = 0):
             db_conn.commit()
         except psycopg2.IntegrityError, e:
             db_conn.rollback()
-            logger.error('Integrity Error %s. License already associated with repo.' %\
-                             e)    
+            logger.error('Integrity Error %s. License %s already associated with repo %s.' %\
+                             (e, l_abbr, r_id)    
         except psycopg2.DatabaseError, e:
             db_conn.rollback()
                 
