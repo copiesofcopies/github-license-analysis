@@ -229,7 +229,7 @@ def runProcess(exe):
 def list_unmatched_repos():
     # List all of the repositories with no readme or license file
 
-    cur.execute("""SELECT r.full_name
+    cur.execute("""SELECT r.full_name, r.html_url
                    FROM repositories r
                    LEFT JOIN repository_licenses l 
                           ON r.gh_id = l.repository_id 
@@ -244,7 +244,7 @@ def list_unmatched_repos():
 
 
 def count_license_matches():
-    # List all of the repositories with no readme or license file
+    # Count licenses matches
 
     cur.execute("""SELECT m.license_abbr, COUNT(r.id)
                    FROM repositories r
@@ -252,13 +252,44 @@ def count_license_matches():
                      ON r.gh_id = l.repository_id 
                    JOIN license_metadata m
                      ON l.id = m.license_id
-               GROUP BY m.license_abbr
+               GROUP BY m.license_abbr, r.full_name
                ORDER BY m.license_abbr ASC""")
 
     licenses = cur.fetchall()
 
     for alicense in licenses:
         print "%s: %s" % ( alicense[0], alicense[1])
+
+
+def map_repos_to_licenses():
+    # Iterate through each repo's licenses, mapping each to an entry
+    # in the master abbreviation list, dropping duplicate & equivalent
+    # entries
+
+    cur.execute("""SELECT id, license_abbr FROM licenses""")
+    abbrs = cur.fetchall()
+    lic_map = {}
+
+    # Create a dict mapping license names to IDs
+    for row in abbrs:
+        lic_map[row[1]] = row[0]
+
+    print lic_map
+
+    # cur.execute("""SELECT r.id as rid, l.id as lid, m.license_abbr as abbr
+    #                  FROM repositories r
+    #                  JOIN repository_licenses l 
+    #                    ON r.gh_id = l.repository_id 
+    #                  JOIN license_metadata m
+    #                    ON l.id = m.license_id
+    #                 WHERE m.license_abbr != 'No_license_found'
+    #              ORDER BY r.id, l.id
+    #                """) 
+
+    # licenses = cur.fetchall()
+
+    # for alicense in licenses:
+    #     print "%s/%s: %s" % (alicense[0], alicense[1], alicense[2])
 
 
 def list_multilicense_repos():
@@ -334,6 +365,11 @@ if __name__ == "__main__":
                       action="store_true", dest="count_license_matches",
                       help="""Count repositories that match each license""",
                       default="")
+
+    parser.add_option('-a', '--map_repos_to_licenses',
+                      action="store_true", dest="map_repos_to_licenses",
+                      help="""Map repos to licenses""",
+                      default="")
     
     options, args = parser.parse_args()
 
@@ -376,3 +412,7 @@ if __name__ == "__main__":
     # Count license occurences
     if options.count_license_matches:
         count_license_matches()
+
+    # Map repos to licenses
+    if options.map_repos_to_licenses:
+        map_repos_to_licenses()
