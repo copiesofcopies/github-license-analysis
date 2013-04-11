@@ -34,8 +34,8 @@ def process_licenses(start = 0):
     # Create a directory to store the license files in
     base_path = config['export_directory']
 
-    #if not os.path.exists(base_path):
-    #    os.makedirs(base_path)
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
 
     # Get repo count
     cur.execute("""SELECT COUNT(*) FROM repositories""")
@@ -49,8 +49,8 @@ def process_licenses(start = 0):
 
         logger.info("Processing repositories %s - %s..." % (start, end))
 
-	#if not os.path.exists(base_path):
-        #    os.makedirs(base_path)
+	if not os.path.exists(base_path):
+            os.makedirs(base_path)
 
         # Get license info
         cur.execute("""SELECT r.id, r.full_name, l.content, l.name, l.id
