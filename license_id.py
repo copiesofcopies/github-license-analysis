@@ -314,7 +314,7 @@ def map_repos_to_licenses(start = 0):
         except psycopg2.IntegrityError, e:
             db_conn.rollback()
             logger.error('Integrity Error %s. License %s already associated with repo %s.' %\
-                             (e, l_abbr, r_id)    
+                             (e, l_abbr, r_id))    
         except psycopg2.DatabaseError, e:
             db_conn.rollback()
                 
