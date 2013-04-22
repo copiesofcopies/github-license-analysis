@@ -175,6 +175,9 @@ if __name__ == "__main__":
             logger.info("Storing repository #%s: %s (Fork? %s)" % \
                             (repo['id'], repo['full_name'], repo['fork']))
 
+            #Some repos don't have owners
+            owner = repo['owner']['login'] or ""
+
             # Store repo in the DB
             try:
                 cur.execute("""
@@ -182,7 +185,7 @@ if __name__ == "__main__":
                                         full_name, description, private, fork,
                                         api_url, html_url) VALUES (%s, %s, %s, 
                                         %s, %s, %s, %s, %s, %s)
-                            """, (repo['id'], repo['owner']['login'],
+                            """, (repo['id'], owner,
                                   repo['name'], repo['full_name'],
                                   repo['description'], repo['private'], 
                                   repo['fork'], repo['url'],
