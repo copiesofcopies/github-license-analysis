@@ -18,17 +18,6 @@ db_conn = None
 cur = None
 nomos_re = re.compile(r"[^\)]*\)\s(.*)")
 
-def create_metadata_table():
-    # Create the license_metadata table if it doesn't already exist
-    cur.execute("""CREATE TABLE license_metadata(id SERIAL PRIMARY KEY, 
-                                license_id INT REFERENCES repository_licenses (id),
-                                is_primary BOOLEAN DEFAULT FALSE,
-                                license_abbr VARCHAR,
-                                UNIQUE(license_id, license_abbr))""")
-
-    db_conn.commit()
-
-
 def process_licenses(start = 0):
 
     # Create a directory to store the license files in
@@ -124,28 +113,6 @@ def process_licenses(start = 0):
 
         shutil.rmtree(base_path)
 
-def export_licenses(output_file_path=None):
-
-    cur.execute("""SELECT r.gh_id as repo_id, r.owner_login as github_user,
-                          r.name as repo_name, r.description as repo_description,
-                          r.private as repo_private, r.fork as repo_isfork, 
-                          r.html_url as repo_url, l.name as license_filename, 
-                          l.html_url as license_url, m.license_abbr as 
-                          license_abbr, m.is_primary as license_isprimary
-                     FROM repositories r
-                     JOIN repository_licenses l 
-                       ON r.gh_id = l.repository_id 
-                     JOIN license_metadata m
-                       ON l.id = m.license_id
-                    WHERE m.license_abbr != 'No_license_found'
-                 ORDER BY r.full_name
-                   """) 
-
-    licenses = cur.fetchall()
-
-    for alicense in licenses:
-        print "%s/%s: %s" % (alicense[0], alicense[1], alicense[2])
-
 
 def process_nomos_output(license_path):
 
@@ -206,6 +173,7 @@ def list_search(alist, value):
 
     return i
 
+
 def list_substring_search(alist, search_substring):
     for item in alist:
         if re.search(search_substring, item):
@@ -224,41 +192,6 @@ def runProcess(exe):
       yield line
       if(retcode is not None):
         break
-
-
-def list_unmatched_repos():
-    # List all of the repositories with no readme or license file
-
-    cur.execute("""SELECT r.full_name, r.html_url
-                   FROM repositories r
-                   LEFT JOIN repository_licenses l 
-                          ON r.gh_id = l.repository_id 
-                   LEFT JOIN license_metadata m
-                          ON l.id = m.license_id
-                   WHERE m.license_id IS NULL""")
-
-    licenses = cur.fetchall()
-
-    for alicense in licenses:
-        print "No match found for %s" % alicense[0]
-
-
-def count_license_matches():
-    # Count licenses matches
-
-    cur.execute("""SELECT m.license_abbr, COUNT(r.id)
-                   FROM repositories r
-                   JOIN repository_licenses l 
-                     ON r.gh_id = l.repository_id 
-                   JOIN license_metadata m
-                     ON l.id = m.license_id
-               GROUP BY m.license_abbr, r.full_name
-               ORDER BY m.license_abbr ASC""")
-
-    licenses = cur.fetchall()
-
-    for alicense in licenses:
-        print "%s: %s" % ( alicense[0], alicense[1])
 
 
 def map_repos_to_licenses(start = 0):
@@ -324,28 +257,6 @@ def map_repos_to_licenses(start = 0):
             sys.exit(1)        
 
 
-def list_multilicense_repos():
-    # List repos for which more than one license was identified
-    
-    cur.execute("""SELECT r.full_name, COUNT(DISTINCT m.license_abbr) as lcount
-                   FROM repositories r
-                   JOIN repository_licenses l 
-                     ON r.gh_id = l.repository_id
-                   JOIN license_metadata m
-                     ON l.id = m.license_id
-               GROUP BY r.full_name
-           HAVING COUNT(DISTINCT m.license_abbr) > 1
-               ORDER BY lcount DESC
-                 """)
-
-    licenses = cur.fetchall()
-
-    print "%s multilicensed repositories found:" % len(licenses)
-
-    for alicense in licenses:
-        print "%s licenses identified for %s" % ( alicense[1], alicense[0] )
-
-
 if __name__ == "__main__":
     # Parse the yaml config file
     config_file = open('config.yaml', 'r')
@@ -353,22 +264,6 @@ if __name__ == "__main__":
 
     # Set up the command line argument parser
     parser = optparse.OptionParser()
-
-    parser.add_option('-c', '--create-metadata-table',
-                      action="store_true", dest="create_metadata_table",
-                      help="""Create the license_metadata table""",
-                      default="")
-
-    parser.add_option('-i', '--identify_licenses',
-                      action="store_true", dest="identify_licenses",
-                      help="""(Re-)scan licenses for identifying strings, 
-                              store results in metadata table""",
-                      default="")
-
-    parser.add_option('-e', '--export_licenses',
-                      action="store_true", dest="export_licenses",
-                      help="""Export CSV of license data for repositories""",
-                      default="")
 
     parser.add_option('-p', '--process_licenses',
                       action="store_true", dest="process_licenses",
@@ -380,23 +275,6 @@ if __name__ == "__main__":
                       action="store", dest="start_with",
                       help="""Indicate which record to start processing with""",
                       default=0)
-
-    parser.add_option('-l', '--list_unmatched_repos',
-                      action="store_true", dest="list_unmatched_repos",
-                      help="""List repositories for which there is no 
-                              license match""",
-                      default="")
-
-    parser.add_option('-m', '--list_multilicense_repos',
-                      action="store_true", dest="list_multilicense_repos",
-                      help="""List repositories for which there are multiple 
-                              license matches""",
-                      default="")
-
-    parser.add_option('-n', '--count_license_matches',
-                      action="store_true", dest="count_license_matches",
-                      help="""Count repositories that match each license""",
-                      default="")
 
     parser.add_option('-a', '--map_repos_to_licenses',
                       action="store_true", dest="map_repos_to_licenses",
@@ -417,33 +295,9 @@ if __name__ == "__main__":
     logging.basicConfig(filename='license_id.log',level=logging.ERROR)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
 
-    # Create the metadata table
-    if options.create_metadata_table:
-        create_metadata_table()
-
-    # Try to match license files against known strings
-    if options.identify_licenses:
-        identify_licenses()
-
     # Try to match license files against known strings
     if options.process_licenses:
         process_licenses(int(options.start_with))
-
-    # Export CSV of license data
-    if options.export_licenses:
-        export_licenses()
-
-    # Print the unmatched files
-    if options.list_unmatched_repos:
-        list_unmatched_repos()
-
-    # Print repos with multiple licenses
-    if options.list_multilicense_repos:
-        list_multilicense_repos()
-
-    # Count license occurences
-    if options.count_license_matches:
-        count_license_matches()
 
     # Map repos to licenses
     if options.map_repos_to_licenses:
