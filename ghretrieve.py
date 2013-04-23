@@ -176,7 +176,10 @@ if __name__ == "__main__":
                             (repo['id'], repo['full_name'], repo['fork']))
 
             #Some repos don't have owners
-            owner = repo['owner']['login'] or ""
+            try:
+                owner = repo['owner']['login']
+            except TypeError:
+                owner = ""
 
             # Store repo in the DB
             try:
